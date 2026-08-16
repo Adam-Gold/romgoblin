@@ -1,6 +1,10 @@
-# ROMgoblin 👺
+<p align="center">
+  <img src="https://pub-fb8f91556fc24a1da5991428b147e590.r2.dev/ROMGoblin.png" alt="ROMgoblin" width="360">
+</p>
 
-*A small goblin that runs through your ROM library and fetches the box art.*
+<h1 align="center">ROMgoblin</h1>
+
+<p align="center"><em>A small goblin that runs through your ROM library and fetches the box art.</em></p>
 
 For [NextUI](https://github.com/LoveRetro/NextUI) handhelds. Matched by **checksum**, not by filename.
 
