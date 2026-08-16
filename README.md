@@ -1,18 +1,39 @@
-<p align="center">
-  <img src="https://pub-fb8f91556fc24a1da5991428b147e590.r2.dev/romgoblin.png" alt="ROMgoblin" width="360">
-</p>
+<div align="center">
 
-<h1 align="center">ROMgoblin</h1>
+<img src="https://pub-fb8f91556fc24a1da5991428b147e590.r2.dev/romgoblin.png" alt="ROMgoblin" width="380">
 
-<p align="center"><em>A small goblin that runs through your ROM library and fetches the box art.</em></p>
+[![Tests](https://img.shields.io/github/actions/workflow/status/Adam-Gold/romgoblin/tests.yml?branch=main&label=tests&style=flat-square)](https://github.com/Adam-Gold/romgoblin/actions/workflows/tests.yml)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue?style=flat-square)](https://www.python.org/downloads/)
+[![Licence](https://img.shields.io/github/license/Adam-Gold/romgoblin?style=flat-square)](LICENSE)
+[![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen?style=flat-square)](pyproject.toml)
 
-For [NextUI](https://github.com/LoveRetro/NextUI) handhelds. Matched by **checksum**, not by filename.
+**Box art for [NextUI](https://github.com/LoveRetro/NextUI) handhelds, fetched from your computer.**
+
+*Finds the art. Never guesses.*
+
+</div>
+
+---
+
+```console
+$ romgoblin /Volumes/NextUI/Roms
+5 game(s) with no cover: MGBA 2, N64 2, PS 1
+  would fetch  MGBA/Rayman 3
+  would fetch  MGBA/Wario Land 4
+  would fetch  N64/Mario Kart 64
+  would fetch  N64/Pokemon Snap
+  would fetch  PS/Spyro 2 - Ripto's Rage!
+
+Nothing was written. Re-run with --apply.
+```
+
+Dry-run by default. Games that already have a cover are not listed, because they are never touched.
 
 ## Why this exists
 
-NextUI gets its artwork from a scraper that runs **on the device**. That works, but it means every batch of new games costs you a round trip: eject the card, put it in the handheld, run the scraper, bring it back. The library lives on your computer; the artwork does not.
+NextUI gets its artwork from a scraper that runs **on the device**. That works, but it means every batch of new games costs a round trip: eject the card, put it in the handheld, run the scraper, bring it back. The library lives on your computer; the artwork does not.
 
-There are already two good desktop scrapers for NextUI. Both match games **by filename**, against the Libretro thumbnail archive. That is fast and needs no account, and for most libraries it is fine.
+There are already good desktop scrapers for NextUI. They match games **by filename**, against the Libretro thumbnail archive. That is fast, needs no account, and for most libraries it is fine.
 
 It is not fine for the cases that matter:
 
@@ -20,56 +41,72 @@ It is not fine for the cases that matter:
 - `Disney's Hercules Action Game (Rerelease).chd` matches no official title at all.
 - A hack, a translation, or a bad dump carries the name of the game it was made from, and none of its content.
 
-**A wrong cover is worse than no cover, because it looks right.** You do not find out until a five-year-old picks the wrong game.
+**A wrong cover is worse than no cover, because it looks right.** You do not find out until someone picks the wrong game.
 
 ROMgoblin asks a different question. It computes the CRC32 of each ROM and asks [ScreenScraper.fr](https://www.screenscraper.fr) which game *that file* is. A checksum is identity; a filename is a guess.
 
-## What it does
+## Installation
 
-- Walks a ROM directory, one system at a time.
-- Identifies each game by CRC32, file size and filename — the combination ScreenScraper matches on.
-- Downloads the box art and writes it where NextUI looks: `.media/<stem>.png` inside the system folder, so `Zelda.zip` gets `Zelda.png`.
-- **Never overwrites and never deletes.** A cover that is already there is left alone, whoever put it there. You can run this alongside the on-device scraper without either one destroying the other's work.
-- Stops cleanly when your ScreenScraper quota runs out, and picks up where it left off next time.
+| | |
+| --- | --- |
+| **pipx** *(recommended)* | `pipx install romgoblin` |
+| **uv** | `uv tool install romgoblin` |
+| **pip** | `pip install romgoblin` |
+| **From source** | `git clone https://github.com/Adam-Gold/romgoblin && cd romgoblin && pip install -e .` |
 
-## What it does not do
-
-- **It does not guess.** A ROM whose checksum ScreenScraper does not recognise gets no artwork and is reported by name, so you know what to look at. Name-based matching is available behind an explicit flag and is never the default.
-- **One source.** ScreenScraper only. No fallback chain, no merging.
-- **Box art only.** Not screenshots, not titles, not logos, not videos, not manuals.
-- **NextUI only.** The whole value here is writing exactly the layout NextUI reads. If you need muOS or Onion or EmulationStation, other tools do that well.
-
-## Install
-
-```bash
-pipx install romgoblin
-```
+Python 3.11 or newer. No dependencies — the standard library computes the checksum and makes the request.
 
 ## Usage
 
-```bash
-romgoblin /Volumes/NEXTUI/Roms
+```console
+$ romgoblin <path to your Roms directory>
 ```
 
-Dry-run by default — it tells you what it would fetch and stops. Nothing is written until you say so:
+Point it at the `Roms` folder on the card, or at a copy of it on disk. It walks each system folder, finds the games with no cover, and tells you what it would fetch.
 
-```bash
-romgoblin /Volumes/NEXTUI/Roms --apply
+Nothing is written until you say so:
+
+```console
+$ romgoblin /Volumes/NextUI/Roms --apply
 ```
+
+| Flag | |
+| --- | --- |
+| `--apply` | actually write. Without it, nothing changes. |
+| `--system TAG` | only one system, e.g. `--system N64` |
+| `--allow-name-match` | accept a result found by filename when the checksum matched nothing. Off by default. |
+
+Covers are written to `.media/<stem>.png` inside each system folder, which is where NextUI looks — so `Zelda.zip` gets `Zelda.png`.
+
+## What it will not do
+
+**It will not guess.** A ROM whose checksum ScreenScraper does not recognise gets no artwork, and is reported by name so you know what to look at. Name matching exists behind `--allow-name-match` and is never the default.
+
+**It will not overwrite, and it will not delete.** A cover that is already there is left alone, whoever put it there. Run it beside the on-device scraper and neither destroys the other's work.
+
+**It will not take whatever image comes first.** Box art only — not screenshots, not title screens, not logos.
+
+**It will not exhaust your quota.** ScreenScraper reports your remaining allowance on every response; when it runs out the tool stops cleanly, says where it stopped, and continues from there next time.
+
+**One source, one target.** ScreenScraper only, NextUI only. If you need Libretro thumbnails, muOS or EmulationStation, other tools do that well and this one does not try.
 
 ## Credentials
 
-ScreenScraper needs two pairs. The **developer** pair identifies this software and ships with it. The **member** pair is yours, and it sets your daily quota:
+ScreenScraper needs two pairs, and they are not interchangeable.
+
+The **developer** pair identifies this software and ships with it.
+
+The **member** pair is yours, and it sets your daily quota:
 
 ```bash
 export SCREENSCRAPER_SSID=your-username
 export SCREENSCRAPER_SSPASSWORD=your-password
 ```
 
-An account is free. Without one you get the anonymous allowance, which is small.
+An account is free. Without one you get the anonymous allowance, which is small but real.
 
-Credentials are read from the environment and never from a config file.
+Credentials are read from the environment and never from a configuration file.
 
 ## Licence
 
-MIT.
+MIT. The artwork it downloads is not ours and is not redistributed — it goes from ScreenScraper to your SD card and nowhere else.
