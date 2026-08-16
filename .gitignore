@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+.DS_Store
+
+# Never commit game content or artwork. This tool downloads box art; that art
+# belongs to whoever made it and stays on the machine that fetched it.
+*.png
+*.jpg
+*.zip
+*.chd
+*.iso
+!tests/fixtures/**

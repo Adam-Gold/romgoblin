@@ -1,0 +1,43 @@
+[project]
+name = "romgoblin"
+version = "0.1.0"
+description = "Box art for NextUI handhelds, matched by checksum instead of filename"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "Adam Gold" }]
+keywords = ["nextui", "minui", "trimui", "boxart", "artwork", "scraper", "screenscraper", "retro", "handheld"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: End Users/Desktop",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Games/Entertainment",
+]
+# Standard library only. `zlib` computes the checksum and `urllib` makes the
+# request; adding a dependency to save a few lines would be a dependency every
+# user installs for the rest of the tool's life.
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[project.urls]
+Homepage = "https://github.com/Adam-Gold/romgoblin"
+Issues = "https://github.com/Adam-Gold/romgoblin/issues"
+
+[project.scripts]
+romgoblin = "romgoblin.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
