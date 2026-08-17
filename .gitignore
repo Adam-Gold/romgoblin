@@ -19,3 +19,7 @@ build/
 
 # Written by the release workflow from repository secrets, never committed.
 romgoblin/_dev_credentials.py
+
+# The member pair, for working locally. The developer pair belongs to the
+# software and arrives in the file above; this one belongs to a person.
+.env.local
