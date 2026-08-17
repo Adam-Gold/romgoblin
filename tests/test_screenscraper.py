@@ -338,3 +338,107 @@ def test_an_error_body_cannot_smuggle_a_credential_back_out() -> None:
     last place that would notice."""
     line = screenscraper.excerpt(b"Erreur sur devid=someone&devpassword=hunter2 - reessayez")
     assert "hunter2" not in line and "someone" not in line
+
+
+# --- the service flaps --------------------------------------------------------
+
+
+class Flaky:
+    """Answers a scripted sequence, so a test can say "fail twice then work"."""
+
+    def __init__(self, *answers: object) -> None:
+        self.answers = list(answers)
+        self.calls = 0
+
+    def __call__(self, request: object, timeout: float = 0) -> object:
+        self.calls += 1
+        answer = self.answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+
+class FakeResponse:
+    def __init__(self, data: bytes) -> None:
+        self.data = data
+
+    def read(self) -> bytes:
+        return self.data
+
+    def __enter__(self) -> FakeResponse:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+
+def with_urlopen(monkeypatch: pytest.MonkeyPatch, fake: Flaky) -> None:
+    import urllib.request
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake)
+
+
+def client() -> screenscraper.Client:
+    return screenscraper.Client(screenscraper.Credentials("d", "p", "", ""))
+
+
+def test_a_flapping_service_is_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Measured, not guessed. Probing their game endpoint six times during a
+    partial outage returned OK, fail, fail, fail, OK, OK. A client that treats
+    the first failure as the answer collects half a library."""
+    good = FakeResponse(b'{"response": {"jeu": {"medias": []}}}')
+    fake = Flaky(TimeoutError("timed out"), TimeoutError("timed out"), good)
+    with_urlopen(monkeypatch, fake)
+
+    payload, _ = client().lookup(crc="0", filename="x.gbc", size=1)
+    assert fake.calls == 3
+    assert "response" in payload
+
+
+def test_a_rejected_password_is_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Repeating a refusal spends the allowance three times as fast on the same
+    answer, and it is the kind of behaviour that gets a developer key revoked."""
+    import urllib.error
+
+    refusal = urllib.error.HTTPError("u", 401, "Unauthorized", {}, None)  # type: ignore[arg-type]
+    fake = Flaky(refusal, refusal, refusal)
+    with_urlopen(monkeypatch, fake)
+
+    with pytest.raises(screenscraper.ScraperError):
+        client().lookup(crc="0", filename="x.gbc", size=1)
+    assert fake.calls == 1
+
+
+def test_a_spent_quota_is_never_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    import urllib.error
+
+    limited = urllib.error.HTTPError("u", 429, "Too Many Requests", {}, None)  # type: ignore[arg-type]
+    fake = Flaky(limited, limited)
+    with_urlopen(monkeypatch, fake)
+
+    with pytest.raises(screenscraper.QuotaExhausted):
+        client().lookup(crc="0", filename="x.gbc", size=1)
+    assert fake.calls == 1
+
+
+def test_an_error_page_served_as_a_success_is_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The failure that arrives as a success. With their database down the media
+    endpoint answered 513 bytes of French error page with a cheerful 200 - no
+    amount of HTTP-level retrying would ever have noticed."""
+    png = b"\x89PNG\r\n\x1a\n" + b"real"
+    fake = Flaky(FakeResponse(b"<b>Erreur</b> mysql"), FakeResponse(png))
+    with_urlopen(monkeypatch, fake)
+
+    assert client().download("https://x/?m=1") == png
+    assert fake.calls == 2
+
+
+def test_an_error_page_that_never_stops_is_reported_with_what_it_said(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = Flaky(*[FakeResponse(b"<b>Erreur</b> mysql a plante") for _ in range(3)])
+    with_urlopen(monkeypatch, fake)
+
+    with pytest.raises(screenscraper.NotAnImage) as caught:
+        client().download("https://x/?m=1")
+    assert "mysql a plante" in str(caught.value)
