@@ -56,13 +56,26 @@ jobs:
       - name: Check the credentials actually made it into the wheel
         # A release that silently ships without them would refuse on every user's
         # machine, and the failure would look like their problem rather than ours.
+        #
+        # The file being present is not the thing worth checking. If a secret is
+        # missing the injection step still writes the file, with empty strings,
+        # and a check for its name passes while shipping exactly the build this
+        # step exists to catch. So the values are read back, and nothing is
+        # printed but their lengths.
         run: |
           python - <<'PY'
-          import glob, zipfile, sys
+          import glob, zipfile
           wheel = glob.glob("dist/*.whl")[0]
           with zipfile.ZipFile(wheel) as archive:
-              names = archive.namelist()
-              assert any(n.endswith("_dev_credentials.py") for n in names), "credentials missing from the wheel"
+              found = [n for n in archive.namelist() if n.endswith("_dev_credentials.py")]
+              assert found, f"credentials missing from {wheel}"
+              source = archive.read(found[0]).decode()
+          scope: dict[str, str] = {}
+          exec(compile(source, found[0], "exec"), scope)
+          for name in ("DEV_ID", "DEV_PASSWORD"):
+              value = scope.get(name) or ""
+              assert value.strip(), f"{name} is empty in the wheel - is the repository secret set?"
+              print(f"{name}: {len(value)} characters")
           print("credentials present in", wheel)
           PY
 
