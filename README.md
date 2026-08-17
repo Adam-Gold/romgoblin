@@ -84,7 +84,13 @@ Covers are written to `.media/<stem>.png` inside each system folder, which is wh
 
 **It will not overwrite, and it will not delete.** A cover that is already there is left alone, whoever put it there. Run it beside the on-device scraper and neither destroys the other's work.
 
-**It will not take whatever image comes first.** Box art only — not screenshots, not title screens, not logos.
+**It will not take whatever image comes first.** Box art only — not screenshots, not title screens, not logos, and not the back of the box. A single game's response offers around thirty images and the cover is not near the top of them.
+
+**It will not write a file it did not verify.** The bytes are checked to be a PNG before anything is written. A media URL that answers an error page with a cheerful `200` would otherwise leave a cover that looks real until it reaches the handheld.
+
+**It will not lose the rest of the run to one bad game.** A timeout on game forty does not abandon games forty-one onward — they are reported at the end, by name, as retryable.
+
+**It will not pick a box at random.** A game has covers per region and they are different pictures. The worldwide edition wins, then US, then Europe — so a library does not end up with a German box for one game and a Japanese one for the next.
 
 **It will not exhaust your quota.** ScreenScraper reports your remaining allowance on every response; when it runs out the tool stops cleanly, says where it stopped, and continues from there next time.
 

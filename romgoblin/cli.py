@@ -76,8 +76,16 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     written = 0
+    # Kept apart because they are different problems with different answers. A
+    # checksum nobody recognises is a ROM to look at by hand; a request that
+    # failed is worth running again in a minute. Merging them into one
+    # "skipped" count would send somebody hunting for a bad dump that was a
+    # timeout.
     unmatched: list[str] = []
+    failed: list[str] = []
+
     for game in games:
+        name = f"{game.tag}/{game.stem}"
         try:
             payload, quota = client.lookup(
                 crc=scan.crc32(game.rom),
@@ -85,31 +93,66 @@ def main(argv: list[str] | None = None) -> int:
                 size=game.rom.stat().st_size,
                 system_id=systems.system_id(game.tag),
             )
-            url = screenscraper.cover_url(payload)
-            if url is None:
-                unmatched.append(f"{game.tag}/{game.stem}")
-                continue
+        except screenscraper.QuotaExhausted as exc:
+            return _stopped(exc, written, unmatched, failed)
+        except screenscraper.ScraperError as exc:
+            # One game's failure is not the run's. Stopping here would mean a
+            # single timeout at game 40 of 107 costs the other 67, and every
+            # one of those is a request already paid for out of the day's
+            # allowance.
+            failed.append(f"{name}: {exc}")
+            continue
+
+        url = screenscraper.cover_url(payload)
+        if url is None:
+            unmatched.append(name)
+            continue
+
+        try:
             image = client.download(url)
-            game.destination.parent.mkdir(parents=True, exist_ok=True)
-            game.destination.write_bytes(image)
-            written += 1
-            print(f"  fetched  {game.tag}/{game.stem}")
+        except screenscraper.QuotaExhausted as exc:
+            return _stopped(exc, written, unmatched, failed)
+        except screenscraper.ScraperError as exc:
+            failed.append(f"{name}: {exc}")
+            continue
+
+        # Written last, and only once there are verified PNG bytes in hand. A
+        # partially written cover is a file NextUI will happily show as a
+        # broken square.
+        game.destination.parent.mkdir(parents=True, exist_ok=True)
+        game.destination.write_bytes(image)
+        written += 1
+        print(f"  fetched  {name}")
+
+        try:
             quota.require_headroom()
         except screenscraper.QuotaExhausted as exc:
-            print(f"\nStopped: {exc}")
-            print(f"Fetched {written} before stopping. Run again tomorrow to continue.")
-            return 0
-        except screenscraper.ScraperError as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return 1
+            return _stopped(exc, written, unmatched, failed)
 
     print(f"\nFetched {written} cover(s).")
+    _report(unmatched, failed)
+    return 0
+
+
+def _report(unmatched: list[str], failed: list[str]) -> None:
+    """Named rather than counted. These are the ones to look at, and a number
+    tells you nothing about which."""
     if unmatched:
-        # Named rather than counted. These are the ones to look at by hand, and
-        # a number tells you nothing about which.
         print(f"{len(unmatched)} not recognised by checksum:")
         for name in unmatched:
             print(f"  {name}")
+    if failed:
+        print(f"{len(failed)} failed and can be retried:")
+        for name in failed:
+            print(f"  {name}")
+
+
+def _stopped(exc: Exception, written: int, unmatched: list[str], failed: list[str]) -> int:
+    """A spent quota ends the run cleanly. It is where the run got to, not a
+    failure of it - so it says so, reports what it found, and exits zero."""
+    print(f"\nStopped: {exc}")
+    print(f"Fetched {written} before stopping. Run again tomorrow to continue.")
+    _report(unmatched, failed)
     return 0
 
 

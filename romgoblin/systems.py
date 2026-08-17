@@ -34,12 +34,26 @@ IMAGE_SUFFIX = ".png"
 
 #: NextUI tag -> ScreenScraper `systemeid`.
 #:
-#: Deliberately empty until the values are read from ScreenScraper's own
-#: `systemesListe.php` with granted credentials. `tests/test_systems.py`
-#: asserts that whatever is here is a plausible tag mapped to a positive
-#: integer; it cannot assert the number is *correct*, which is exactly why
-#: guessing is forbidden rather than merely discouraged.
-SYSTEM_IDS: dict[str, int] = {}
+#: Every value read from ScreenScraper's own `systemesListe.php` on 2026-08-17,
+#: never inferred. A wrong number returns artwork for a different console, which
+#: is the failure this tool exists to avoid, so a tag missing from this table is
+#: better than a tag guessed into it.
+#:
+#: Their catalogue lists 250 systems and several are near-misses that a loose
+#: match happily returns: `Megadrive 32X` (19) beside `Megadrive` (1),
+#: `Playstation 2` (58) beside `Playstation` (57), `Nintendo 64DD` (122) beside
+#: `Nintendo 64` (14), and hack collections such as `Nes - Super Mario Bros.
+#: Hacks` (278). Each entry below is the base console.
+SYSTEM_IDS: dict[str, int] = {
+    "MD": 1,  # Megadrive / Genesis
+    "FC": 3,  # NES / Family Computer
+    "SFC": 4,  # Super Nintendo / Super Famicom
+    "GBC": 10,  # Game Boy Color
+    "MGBA": 12,  # Game Boy Advance
+    "N64": 14,  # Nintendo 64
+    "PS": 57,  # PlayStation
+    "PSP": 61,  # PlayStation Portable
+}
 
 
 def tag_of(folder: Path) -> str | None:

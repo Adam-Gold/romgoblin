@@ -44,7 +44,7 @@ SOFTNAME = "romgoblin"
 #: instead. Either way `Credentials.resolve` refuses with the real reason rather
 #: than sending a request it knows will be rejected.
 try:  # pragma: no cover - present only in a built distribution
-    from romgoblin._dev_credentials import DEV_ID, DEV_PASSWORD
+    from romgoblin._dev_credentials import DEV_ID, DEV_PASSWORD  # type: ignore[import-untyped]
 except ImportError:  # pragma: no cover - the ordinary case in a clone
     DEV_ID = os.environ.get("SCREENSCRAPER_DEVID", "")
     DEV_PASSWORD = os.environ.get("SCREENSCRAPER_DEVPASSWORD", "")
@@ -58,6 +58,10 @@ class ScraperError(Exception):
 
 class CredentialsMissing(ScraperError):
     """Refused before any request. Names what is absent."""
+
+
+class NotAnImage(ScraperError):
+    """The download did not come back a PNG. One game's problem, not the run's."""
 
 
 class QuotaExhausted(ScraperError):
@@ -132,18 +136,63 @@ def quota_of(payload: dict[str, Any]) -> Quota:
     )
 
 
+#: Preferred cover regions, best first.
+#:
+#: A game has box art per region and they are genuinely different pictures - a
+#: European box, a Japanese box, a German box. ScreenScraper returns them in no
+#: order anybody outside ScreenScraper can predict: the recorded response for
+#: Pokemon Crystal offers its German box first, purely because that is how the
+#: list came back.
+#:
+#: This is not a correctness matter - every one of them is the right game - but
+#: taking whichever came first means an English-language library gets a German
+#: box for one game and a Japanese one for the next, with no reason a person
+#: could see. `wor` is ScreenScraper's world-wide edition and is the best answer
+#: when it exists. Anything unlisted is still used, after everything listed.
+REGION_PREFERENCE = ("wor", "us", "eu", "uk", "jp", "ss")
+
+#: Not "any box". `box-2D-back` and `box-2D-side` are the back and the spine of
+#: the same box, and both start with `box-2D`, so a prefix match quietly puts a
+#: barcode on the menu.
+COVER_TYPE = "box-2d"
+
+
+def _rank(medium: dict[str, Any]) -> int:
+    region = str(medium.get("region") or "").lower()
+    try:
+        return REGION_PREFERENCE.index(region)
+    except ValueError:
+        return len(REGION_PREFERENCE)
+
+
 def cover_url(payload: dict[str, Any]) -> str | None:
     """The box art URL in a game response, or `None` if it carries none.
 
-    Box art only. A response also offers screenshots, title screens, logos and
-    video, and taking whichever happens to come first is how a tool ends up
-    putting a screenshot where a cover belongs.
+    Box art only. The recorded response offers 28 media for a single game -
+    screenshots, title screens, three wheel treatments, a manual, a video, the
+    box from three angles - and `box-2D` sits at index 11 of them. Taking
+    whichever came first is how a tool ends up putting a screenshot where a
+    cover belongs, and it looks like it worked.
     """
     game = (payload.get("response") or {}).get("jeu") or {}
-    for medium in game.get("medias") or []:
-        if medium.get("type") in ("box-2D", "box-2d") and medium.get("url"):
-            return str(medium["url"])
-    return None
+    covers = [
+        medium
+        for medium in game.get("medias") or []
+        if str(medium.get("type", "")).lower() == COVER_TYPE and medium.get("url")
+    ]
+    if not covers:
+        return None
+    return str(min(covers, key=_rank)["url"])
+
+
+#: PNG's signature. NextUI reads `.media/<stem>.png`, and a file that is named
+#: `.png` while being something else is the kind of failure that shows up as a
+#: blank square on a handheld, days later, with nothing in any log.
+PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+
+
+def is_png(data: bytes) -> bool:
+    return data.startswith(PNG_MAGIC)
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,6 +207,7 @@ class Client:
         except urllib.error.HTTPError as exc:
             if exc.code == 429:
                 raise QuotaExhausted("ScreenScraper is rate-limiting this account") from exc
+            # Never the URL: it carries the credentials. See `safe_url`.
             raise ScraperError(f"HTTP {exc.code} from ScreenScraper") from exc
         except urllib.error.URLError as exc:
             raise ScraperError(f"cannot reach ScreenScraper: {exc.reason}") from exc
@@ -198,4 +248,45 @@ class Client:
         return payload, quota_of(payload)
 
     def download(self, url: str) -> bytes:
-        return self._get(url)
+        """The image behind a media URL, as PNG, or a refusal.
+
+        Two things are asked of the response and neither is assumed. `mediaformat`
+        asks ScreenScraper to hand back a PNG - their media endpoint accepts the
+        conversion, and an endpoint that did not would ignore an unknown
+        parameter rather than fail. Then the bytes are checked, because what was
+        asked for and what arrived are different facts.
+
+        A media URL that returns an HTML error page with a cheerful 200 is a
+        thing that happens, and writing that to `Zelda.png` would leave a file
+        that is exactly as convincing as a real one until somebody looks at the
+        handheld.
+        """
+        separator = "&" if "?" in url else "?"
+        data = self._get(f"{url}{separator}mediaformat=png")
+        if not is_png(data):
+            # Never the URL, and never the body - the first carries the
+            # credentials and the second is unknown. See `safe_url`.
+            raise NotAnImage(f"ScreenScraper returned {len(data)} bytes that are not a PNG")
+        return data
+
+
+#: ScreenScraper returns media URLs with the caller's credentials embedded in the
+#: query string - `mediaJeu.php?devid=...&devpassword=...`. That is how their
+#: media endpoint authenticates, and it makes a media URL a secret rather than a
+#: link.
+#:
+#: The consequence is not theoretical: printing one in a verbose line, an error
+#: message or a crash report puts the developer password in somebody's terminal
+#: and in every log that terminal feeds. Anything that shows a URL to a human or
+#: writes one to disk goes through this first.
+SENSITIVE_PARAMS = frozenset({"devid", "devpassword", "ssid", "sspassword", "devdebugpassword"})
+
+
+def safe_url(url: str) -> str:
+    """The same URL with every credential replaced, for showing or logging."""
+    parts = urllib.parse.urlsplit(url)
+    if not parts.query:
+        return url
+    query = urllib.parse.parse_qsl(parts.query, keep_blank_values=True)
+    clean = [(k, "REDACTED" if k in SENSITIVE_PARAMS else v) for k, v in query]
+    return urllib.parse.urlunsplit(parts._replace(query=urllib.parse.urlencode(clean)))
