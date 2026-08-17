@@ -66,6 +66,19 @@ TIMEOUT_SECONDS = 30
 #: Retries cost quota, which is why there are two of them and not ten.
 RETRY_DELAYS: tuple[float, ...] = (2.0, 5.0)
 
+#: The widest a cover is fetched at, in pixels. ScreenScraper resizes on their
+#: side, so this is bandwidth and card space that is never spent rather than
+#: spent and then thrown away.
+#:
+#: Measured on the real card. Diddy Kong Racing's box art arrives at 1000x690
+#: and 1274 KB - which across a 107-game library is 133 MB, for pictures wider
+#: than the Brick's entire 1024-pixel screen. At 400 the same cover is 227 KB,
+#: and the library is 24 MB.
+#:
+#: `--max-width 0` fetches whatever they have, for anyone whose screen is
+#: bigger than this one.
+DEFAULT_MAX_WIDTH = 400
+
 
 class ScraperError(Exception):
     """The service could not be reached, or did not answer in the shape asked for.
@@ -343,14 +356,13 @@ class Client:
             raise ScraperError("ScreenScraper returned something that is not an object")
         return payload, quota_of(payload)
 
-    def download(self, url: str) -> bytes:
+    def download(self, url: str, max_width: int = DEFAULT_MAX_WIDTH) -> bytes:
         """The image behind a media URL, as PNG, or a refusal.
 
         Two things are asked of the response and neither is assumed. `mediaformat`
-        asks ScreenScraper to hand back a PNG - their media endpoint accepts the
-        conversion, and an endpoint that did not would ignore an unknown
-        parameter rather than fail. Then the bytes are checked, because what was
-        asked for and what arrived are different facts.
+        asks for a PNG and `maxwidth` asks them to resize before sending, both
+        verified against the live service. Then the bytes are checked, because
+        what was asked for and what arrived are different facts.
 
         A media URL that returns an HTML error page with a cheerful 200 is a
         thing that happens, and writing that to `Zelda.png` would leave a file
@@ -358,11 +370,12 @@ class Client:
         handheld.
         """
         separator = "&" if "?" in url else "?"
+        size = f"&maxwidth={max_width}" if max_width > 0 else ""
         # `_get` retries the transport. The PNG check has to sit inside its own
         # retry as well, because the failure it catches arrives as a success:
         # during their outage the media endpoint served a database error page
         # with a 200, which no amount of HTTP-level retrying would notice.
-        return self._get(f"{url}{separator}mediaformat=png", validate=_require_png)
+        return self._get(f"{url}{separator}mediaformat=png{size}", validate=_require_png)
 
 
 #: ScreenScraper returns media URLs with the caller's credentials embedded in the

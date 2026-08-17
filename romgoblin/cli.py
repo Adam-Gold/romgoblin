@@ -32,6 +32,18 @@ def build_parser() -> argparse.ArgumentParser:
             "matched nothing. Off by default: a wrong cover looks right."
         ),
     )
+    parser.add_argument(
+        "--max-width",
+        type=int,
+        default=screenscraper.DEFAULT_MAX_WIDTH,
+        metavar="PX",
+        help=(
+            f"resize covers to this width before download (default "
+            f"{screenscraper.DEFAULT_MAX_WIDTH}, 0 for whatever ScreenScraper has). "
+            "Their side does the resizing, so a smaller number is bandwidth and "
+            "card space never spent rather than spent and thrown away."
+        ),
+    )
     return parser
 
 
@@ -126,7 +138,7 @@ def main(argv: list[str] | None = None) -> int:
             continue
 
         try:
-            image = client.download(url)
+            image = client.download(url, max_width=args.max_width)
         except screenscraper.QuotaExhausted as exc:
             return _stopped(exc, written, unmatched, failed)
         except screenscraper.ScraperError as exc:

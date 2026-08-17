@@ -75,8 +75,11 @@ $ romgoblin /Volumes/NextUI/Roms --apply
 | `--apply` | actually write. Without it, nothing changes. |
 | `--system TAG` | only one system, e.g. `--system N64` |
 | `--allow-name-match` | accept a result found by filename when the checksum matched nothing. Off by default. |
+| `--max-width PX` | resize covers before download. Default `400`; `0` fetches full size. |
 
 Covers are written to `.media/<stem>.png` inside each system folder, which is where NextUI looks — so `Zelda.zip` gets `Zelda.png`.
+
+They arrive resized. Full size, one box art measured 1000×690 and 1274 KB — wider than the whole screen of the handheld it is for, and 133 MB across a hundred-game library. ScreenScraper resizes on their side, so the default is bandwidth and card space never spent rather than spent and thrown away. `--max-width 0` if your screen is bigger.
 
 ## What it will not do
 

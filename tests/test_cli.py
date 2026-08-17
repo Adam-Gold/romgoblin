@@ -82,6 +82,7 @@ class FakeClient:
     def __init__(self, behaviour: dict[str, str]) -> None:
         self.behaviour = behaviour
         self.downloads = 0
+        self.widths: list[int] = []
 
     def lookup(self, *, crc, filename, size, system_id):  # noqa: ANN001, ANN003
         from romgoblin import screenscraper
@@ -99,8 +100,9 @@ class FakeClient:
         payload = {"response": {"ssuser": {}, "jeu": {"medias": medias}}}
         return payload, screenscraper.Quota(used=1, allowed=100)
 
-    def download(self, url: str) -> bytes:  # noqa: ARG002
+    def download(self, url: str, max_width: int = 0) -> bytes:  # noqa: ARG002
         self.downloads += 1
+        self.widths.append(max_width)
         return PNG
 
 
@@ -209,3 +211,33 @@ def test_an_unrecognised_rom_does_not_count_towards_giving_up(tmp_path: Path, mo
     behaviour = dict.fromkeys(["U1", "U2", "U3", "U4"], "no-cover")
     assert run(monkeypatch, roms, FakeClient(behaviour)) == 0
     assert (roms / "Game Boy Color (GBC)" / ".media" / "Known.png").exists()
+
+
+def test_covers_are_resized_before_they_are_downloaded(tmp_path: Path, monkeypatch) -> None:
+    """Measured on the real card: unresized, Diddy Kong Racing's box art is
+    1000x690 and 1274 KB, and a 107-game library is 133 MB of pictures wider
+    than the Brick's entire screen. ScreenScraper resizes on their side, so a
+    limit here is bandwidth never spent rather than spent and thrown away."""
+    from romgoblin import screenscraper
+
+    roms = library(tmp_path, "A")
+    client = FakeClient({})
+    run(monkeypatch, roms, client)
+    assert client.widths == [screenscraper.DEFAULT_MAX_WIDTH]
+
+
+def test_the_width_limit_can_be_turned_off(tmp_path: Path, monkeypatch) -> None:
+    """For a screen bigger than this one."""
+    from romgoblin import screenscraper
+
+    roms = library(tmp_path, "A")
+    client = FakeClient({})
+    monkeypatch.setattr(
+        screenscraper.Credentials,
+        "resolve",
+        classmethod(lambda cls: screenscraper.Credentials("d", "p", "s", "p")),
+    )
+    monkeypatch.setattr(screenscraper, "Client", lambda credentials: client)
+
+    assert cli.main([str(roms), "--apply", "--max-width", "0"]) == 0
+    assert client.widths == [0]
