@@ -75,7 +75,19 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
+    # ScreenScraper goes down. The first live run of this tool met their
+    # database being unreachable, and worked exactly as designed: fourteen
+    # games, fourteen identical failures, seven of them after a thirty-second
+    # wait. That is three minutes to learn one fact, printed fourteen times.
+    #
+    # So a run that has achieved nothing and failed this many times in a row
+    # stops and says the one thing that is true. The counter resets on any
+    # success, because a library with a few unreachable games is a different
+    # situation and must not be cut short.
+    GIVE_UP_AFTER = 3
+
     written = 0
+    in_a_row = 0
     # Kept apart because they are different problems with different answers. A
     # checksum nobody recognises is a ROM to look at by hand; a request that
     # failed is worth running again in a minute. Merging them into one
@@ -101,10 +113,15 @@ def main(argv: list[str] | None = None) -> int:
             # one of those is a request already paid for out of the day's
             # allowance.
             failed.append(f"{name}: {exc}")
+            in_a_row += 1
+            if written == 0 and in_a_row >= GIVE_UP_AFTER:
+                return _gave_up(failed)
             continue
 
         url = screenscraper.cover_url(payload)
         if url is None:
+            # Not a failure. Their service answered; it does not know this ROM.
+            in_a_row = 0
             unmatched.append(name)
             continue
 
@@ -114,6 +131,9 @@ def main(argv: list[str] | None = None) -> int:
             return _stopped(exc, written, unmatched, failed)
         except screenscraper.ScraperError as exc:
             failed.append(f"{name}: {exc}")
+            in_a_row += 1
+            if written == 0 and in_a_row >= GIVE_UP_AFTER:
+                return _gave_up(failed)
             continue
 
         # Written last, and only once there are verified PNG bytes in hand. A
@@ -122,6 +142,7 @@ def main(argv: list[str] | None = None) -> int:
         game.destination.parent.mkdir(parents=True, exist_ok=True)
         game.destination.write_bytes(image)
         written += 1
+        in_a_row = 0
         print(f"  fetched  {name}")
 
         try:
@@ -132,6 +153,20 @@ def main(argv: list[str] | None = None) -> int:
     print(f"\nFetched {written} cover(s).")
     _report(unmatched, failed)
     return 0
+
+
+def _gave_up(failed: list[str]) -> int:
+    """Stopped early, having achieved nothing and failed the same way each time.
+
+    Exit 1, unlike a spent quota: the allowance running out is the arrangement
+    working, and this is the service being unavailable. A script that runs this
+    nightly should be able to tell those apart.
+    """
+    print(f"\nStopped after {len(failed)} failures in a row, having fetched nothing.")
+    print("This looks like ScreenScraper rather than your library. What it said:")
+    print(f"  {failed[-1].split(': ', 1)[-1]}")
+    print("\nNothing was written. Try again later.")
+    return 1
 
 
 def _report(unmatched: list[str], failed: list[str]) -> None:

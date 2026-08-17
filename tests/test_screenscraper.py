@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -100,14 +101,21 @@ def test_developer_credentials_are_not_in_this_repository() -> None:
     This asserts the source stays clean, which is the half a reviewer cannot see
     by reading a diff six months from now.
     """
-    from pathlib import Path
-
     source = Path(screenscraper.__file__).read_text(encoding="utf-8")
     assert 'DEV_ID = ""' not in source, "no literal, not even an empty one to fill in"
     assert "_dev_credentials" in source, "the injected module is how a release gets them"
-    assert not (Path(screenscraper.__file__).parent / "_dev_credentials.py").is_file(), (
-        "a generated credentials file must never be committed"
+    # Asked of git, not of the filesystem. The file is *supposed* to exist on a
+    # developer's machine - that is the documented way to work from a clone, and
+    # it is what the release workflow writes before building. What must never
+    # happen is git knowing about it. The earlier version of this assertion
+    # tested for absence on disk, which passed in CI, passed on a fresh clone,
+    # and failed the moment somebody followed the README.
+    tracked = subprocess.run(
+        ["git", "ls-files", "--error-unmatch", "romgoblin/_dev_credentials.py"],
+        cwd=Path(__file__).parent.parent,
+        capture_output=True,
     )
+    assert tracked.returncode != 0, "a credentials file is tracked by git"
 
 
 def test_a_clone_can_supply_them_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -265,3 +273,68 @@ def test_bytes_that_are_not_a_png_are_refused() -> None:
     real cover until somebody looks at the handheld."""
     assert not screenscraper.is_png(b"<html>Erreur</html>")
     assert screenscraper.is_png(b"\x89PNG\r\n\x1a\n" + b"rest")
+
+
+# --- how it actually fails ----------------------------------------------------
+
+
+def test_a_read_timeout_is_a_scraper_error_not_a_traceback() -> None:
+    """Found on the first live run. `urlopen` wraps failures that happen while
+    connecting, but a socket that goes quiet *after* the connection is
+    established raises `TimeoutError` straight through - past a handler that
+    only knew about `URLError`, and out of the run as a traceback. The
+    per-game failure list is worth nothing if the ordinary failure walks past
+    it.
+    """
+    client = screenscraper.Client(screenscraper.Credentials("d", "p", "", ""))
+
+    def times_out(*args: object, **kwargs: object) -> None:
+        raise TimeoutError("The read operation timed out")
+
+    import urllib.request
+
+    original = urllib.request.urlopen
+    urllib.request.urlopen = times_out  # type: ignore[assignment]
+    try:
+        with pytest.raises(screenscraper.ScraperError) as caught:
+            client.lookup(crc="0", filename="x.gbc", size=1)
+    finally:
+        urllib.request.urlopen = original  # type: ignore[assignment]
+    assert "did not answer" in str(caught.value)
+
+
+def test_a_reset_connection_is_a_scraper_error_too() -> None:
+    client = screenscraper.Client(screenscraper.Credentials("d", "p", "", ""))
+
+    def resets(*args: object, **kwargs: object) -> None:
+        raise ConnectionResetError("Connection reset by peer")
+
+    import urllib.request
+
+    original = urllib.request.urlopen
+    urllib.request.urlopen = resets  # type: ignore[assignment]
+    try:
+        with pytest.raises(screenscraper.ScraperError):
+            client.lookup(crc="0", filename="x.gbc", size=1)
+    finally:
+        urllib.request.urlopen = original  # type: ignore[assignment]
+
+
+def test_an_error_body_is_quoted_so_the_fault_can_be_placed() -> None:
+    """The first live run met ScreenScraper's database being down. All it could
+    say was `HTTP 500`, which sends somebody hunting for a fault in their own
+    library - the answer was in the body it discarded."""
+    body = (
+        b"<br />\n<b>Warning</b>: mysqli_connect(): No route to host<br />\n"
+        b"Erreur : Mysql a encore plante ! #mysqlbashing\n"
+    )
+    line = screenscraper.excerpt(body)
+    assert "mysqli_connect" in line
+    assert "<b>" not in line and "\n" not in line
+
+
+def test_an_error_body_cannot_smuggle_a_credential_back_out() -> None:
+    """The body is theirs. If it ever starts echoing the request, this is the
+    last place that would notice."""
+    line = screenscraper.excerpt(b"Erreur sur devid=someone&devpassword=hunter2 - reessayez")
+    assert "hunter2" not in line and "someone" not in line

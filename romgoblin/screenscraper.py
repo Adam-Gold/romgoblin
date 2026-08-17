@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -207,10 +208,25 @@ class Client:
         except urllib.error.HTTPError as exc:
             if exc.code == 429:
                 raise QuotaExhausted("ScreenScraper is rate-limiting this account") from exc
-            # Never the URL: it carries the credentials. See `safe_url`.
-            raise ScraperError(f"HTTP {exc.code} from ScreenScraper") from exc
+            # Never the URL: it carries the credentials. The body is safe to
+            # quote and is usually the only thing that says whose fault it is.
+            detail = excerpt(exc.read())
+            raise ScraperError(
+                f"HTTP {exc.code} from ScreenScraper" + (f": {detail}" if detail else "")
+            ) from exc
         except urllib.error.URLError as exc:
             raise ScraperError(f"cannot reach ScreenScraper: {exc.reason}") from exc
+        except TimeoutError as exc:
+            # Not a URLError. `urlopen` wraps failures that happen while
+            # connecting, but a socket that goes quiet *after* the connection is
+            # established raises this straight through - so the first live run
+            # ended in a traceback rather than in the per-game failure list this
+            # client had just been given. ScreenScraper is slow under load often
+            # enough that this is the ordinary failure, not the exotic one.
+            raise ScraperError(f"ScreenScraper did not answer within {TIMEOUT_SECONDS}s") from exc
+        except OSError as exc:
+            # A connection reset lands here for the same reason.
+            raise ScraperError(f"connection to ScreenScraper failed: {exc}") from exc
 
     def lookup(
         self, *, crc: str, filename: str, size: int, system_id: int | None = None
@@ -264,9 +280,15 @@ class Client:
         separator = "&" if "?" in url else "?"
         data = self._get(f"{url}{separator}mediaformat=png")
         if not is_png(data):
-            # Never the URL, and never the body - the first carries the
-            # credentials and the second is unknown. See `safe_url`.
-            raise NotAnImage(f"ScreenScraper returned {len(data)} bytes that are not a PNG")
+            # Never the URL - it carries the credentials. The body is quoted,
+            # because when their database is down the media endpoint serves the
+            # same French error page as this, with a cheerful 200, and 513 bytes
+            # of unexplained not-a-PNG is not something anybody can act on.
+            raise NotAnImage(
+                f"not a PNG ({len(data)} bytes): {excerpt(data, 100)}"
+                if data
+                else "ScreenScraper returned an empty response"
+            )
         return data
 
 
@@ -280,6 +302,28 @@ class Client:
 #: and in every log that terminal feeds. Anything that shows a URL to a human or
 #: writes one to disk goes through this first.
 SENSITIVE_PARAMS = frozenset({"devid", "devpassword", "ssid", "sspassword", "devdebugpassword"})
+
+
+def excerpt(data: bytes, limit: int = 140) -> str:
+    """One readable line from a response body, for saying what went wrong.
+
+    ScreenScraper answers a failure with a page rather than a code, and the page
+    is the only thing that distinguishes "your ROM is unknown" from "our
+    database is down". The first live run of this tool met the second and could
+    only report `HTTP 500`, which sends somebody looking for a fault in their
+    own library:
+
+        Warning: mysqli_connect(): No route to host ...
+        Nous rencontrons actuellement des problemes mySQL.
+
+    Markup and blank lines are dropped, and anything shaped like a credential is
+    redacted on the way out - the body is theirs and this is the last place that
+    would notice if it started echoing a request back.
+    """
+    text = re.sub(r"<[^>]+>", " ", data.decode("utf-8", errors="replace"))
+    text = re.sub(r"(?i)\b(dev|ss)(id|password)=\S+", r"\1\2=REDACTED", text)
+    text = " ".join(text.split())
+    return text[:limit] + ("..." if len(text) > limit else "")
 
 
 def safe_url(url: str) -> str:

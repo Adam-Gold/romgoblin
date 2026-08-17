@@ -26,9 +26,21 @@ def test_the_default_writes_nothing(tmp_path: Path, capsys) -> None:
     assert not (roms / "Game Boy Color (GBC)" / ".media").exists()
 
 
-def test_apply_without_credentials_refuses_before_touching_anything(tmp_path: Path, capsys) -> None:
+def test_apply_without_credentials_refuses_before_touching_anything(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
     """Exit 2: this is a configuration problem, not a transient one. Nothing is
-    created on the way to finding out."""
+    created on the way to finding out.
+
+    The absence is arranged rather than assumed. This test used to rely on the
+    machine running it having no credentials, which is true in CI and false on
+    the machine of anyone who followed the README - so it passed everywhere it
+    was written and failed the first time it mattered."""
+    from romgoblin import screenscraper
+
+    monkeypatch.setattr(screenscraper, "DEV_ID", "")
+    monkeypatch.setattr(screenscraper, "DEV_PASSWORD", "")
+
     roms = card(tmp_path)
     assert cli.main([str(roms), "--apply"]) == 2
     assert not (roms / "Game Boy Color (GBC)" / ".media").exists()
@@ -162,3 +174,38 @@ def test_a_cover_that_is_already_there_is_never_fetched_again(tmp_path: Path, mo
     run(monkeypatch, roms, client)
     assert client.downloads == 1
     assert (media / "Have.png").read_bytes() == b"someone else's cover"
+
+
+def test_a_service_outage_stops_early_and_says_so_once(tmp_path: Path, monkeypatch, capsys) -> None:
+    """The first live run met ScreenScraper's database being down: fourteen
+    games, fourteen identical failures, seven of them after a thirty-second
+    wait. Three minutes to learn one fact, printed fourteen times."""
+    roms = library(tmp_path, "A", "B", "C", "D", "E", "F")
+    client = FakeClient(dict.fromkeys("ABCDEF", "lookup-fails"))
+    assert run(monkeypatch, roms, client) == 1
+
+    out = capsys.readouterr().out
+    assert "looks like ScreenScraper rather than your library" in out
+    assert out.count("HTTP 503") == 1, "the same fact, once"
+    assert not (roms / "Game Boy Color (GBC)" / ".media").exists()
+
+
+def test_a_few_bad_games_do_not_stop_a_working_run(tmp_path: Path, monkeypatch, capsys) -> None:
+    """The counter resets on success. A library with a handful of unreachable
+    games is a different situation from an outage, and cutting it short would
+    abandon everything after the third bad one."""
+    roms = library(tmp_path, "A", "Bad1", "Bad2", "Bad3", "Z")
+    behaviour = dict.fromkeys(["Bad1", "Bad2", "Bad3"], "lookup-fails")
+    assert run(monkeypatch, roms, FakeClient(behaviour)) == 0
+
+    media = roms / "Game Boy Color (GBC)" / ".media"
+    assert sorted(p.name for p in media.iterdir()) == ["A.png", "Z.png"]
+
+
+def test_an_unrecognised_rom_does_not_count_towards_giving_up(tmp_path: Path, monkeypatch) -> None:
+    """Their service answered; it does not know this ROM. That is the tool
+    working, and a card full of hacks would otherwise look like an outage."""
+    roms = library(tmp_path, "U1", "U2", "U3", "U4", "Known")
+    behaviour = dict.fromkeys(["U1", "U2", "U3", "U4"], "no-cover")
+    assert run(monkeypatch, roms, FakeClient(behaviour)) == 0
+    assert (roms / "Game Boy Color (GBC)" / ".media" / "Known.png").exists()
