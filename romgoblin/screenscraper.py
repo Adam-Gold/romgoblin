@@ -34,11 +34,20 @@ API = "https://www.screenscraper.fr/api2/jeuInfos.php"
 #: Registered with ScreenScraper and reported on every request.
 SOFTNAME = "romgoblin"
 
-#: Granted to the software, not to the user. Empty until ScreenScraper issues
-#: them; `Credentials.resolve` refuses rather than sending a request that would
-#: be rejected, so the failure names the real reason.
-DEV_ID = ""
-DEV_PASSWORD = ""
+#: Granted to the software, not to the user — and deliberately absent from this
+#: repository, which is public. A credential committed to GitHub is a credential
+#: anyone can lift and spend, and secret scanners are right to flag one.
+#:
+#: The published wheel carries them: the release workflow writes
+#: `_dev_credentials.py` from repository secrets just before building, and that
+#: file is git-ignored. Developing from a clone, they come from the environment
+#: instead. Either way `Credentials.resolve` refuses with the real reason rather
+#: than sending a request it knows will be rejected.
+try:  # pragma: no cover - present only in a built distribution
+    from romgoblin._dev_credentials import DEV_ID, DEV_PASSWORD
+except ImportError:  # pragma: no cover - the ordinary case in a clone
+    DEV_ID = os.environ.get("SCREENSCRAPER_DEVID", "")
+    DEV_PASSWORD = os.environ.get("SCREENSCRAPER_DEVPASSWORD", "")
 
 TIMEOUT_SECONDS = 30
 
@@ -83,8 +92,10 @@ class Credentials:
         committed by accident."""
         if not DEV_ID or not DEV_PASSWORD:
             raise CredentialsMissing(
-                "This build has no ScreenScraper developer credentials. "
-                "They are granted to the software, not to you: see the README."
+                "No ScreenScraper developer credentials in this build. They are "
+                "granted to the software rather than to you, so a release carries "
+                "them; a clone needs SCREENSCRAPER_DEVID and "
+                "SCREENSCRAPER_DEVPASSWORD in the environment. See the README."
             )
         return cls(
             dev_id=DEV_ID,

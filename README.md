@@ -94,7 +94,17 @@ Covers are written to `.media/<stem>.png` inside each system folder, which is wh
 
 ScreenScraper needs two pairs, and they are not interchangeable.
 
-The **developer** pair identifies this software and ships with it.
+The **developer** pair identifies this software. It ships inside the released
+package and is deliberately absent from this repository — a credential
+committed to a public repo is one anybody can lift and spend. Working from a
+clone, supply your own:
+
+```bash
+export SCREENSCRAPER_DEVID=...
+export SCREENSCRAPER_DEVPASSWORD=...
+```
+
+Developer access is granted by ScreenScraper on request, in their forum.
 
 The **member** pair is yours, and it sets your daily quota:
 

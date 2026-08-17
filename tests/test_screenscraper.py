@@ -78,3 +78,41 @@ def test_member_credentials_are_optional(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.delenv("SCREENSCRAPER_SSID", raising=False)
     monkeypatch.delenv("SCREENSCRAPER_SSPASSWORD", raising=False)
     assert screenscraper.Credentials.resolve().ssid == ""
+
+
+def test_developer_credentials_are_not_in_this_repository() -> None:
+    """The repo is public. A credential committed here is one anyone can lift
+    and spend, and ScreenScraper would be right to revoke it.
+
+    The published wheel carries them - the release workflow writes
+    `_dev_credentials.py` from repository secrets and that file is git-ignored.
+    This asserts the source stays clean, which is the half a reviewer cannot see
+    by reading a diff six months from now.
+    """
+    from pathlib import Path
+
+    source = Path(screenscraper.__file__).read_text(encoding="utf-8")
+    assert 'DEV_ID = ""' not in source, "no literal, not even an empty one to fill in"
+    assert "_dev_credentials" in source, "the injected module is how a release gets them"
+    assert not (Path(screenscraper.__file__).parent / "_dev_credentials.py").is_file(), (
+        "a generated credentials file must never be committed"
+    )
+
+
+def test_a_clone_can_supply_them_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Developing against the real API should not require building a wheel."""
+    monkeypatch.setattr(screenscraper, "DEV_ID", "dev")
+    monkeypatch.setattr(screenscraper, "DEV_PASSWORD", "secret")
+    monkeypatch.setenv("SCREENSCRAPER_SSID", "adam")
+    monkeypatch.setenv("SCREENSCRAPER_SSPASSWORD", "hunter2")
+    resolved = screenscraper.Credentials.resolve()
+    assert (resolved.dev_id, resolved.ssid) == ("dev", "adam")
+
+
+def test_the_refusal_says_which_half_is_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Two different problems wear the same error otherwise: a clone with no
+    environment, and a release built without its secrets."""
+    monkeypatch.setattr(screenscraper, "DEV_ID", "")
+    with pytest.raises(screenscraper.CredentialsMissing) as caught:
+        screenscraper.Credentials.resolve()
+    assert "SCREENSCRAPER_DEVID" in str(caught.value)

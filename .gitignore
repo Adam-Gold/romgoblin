@@ -16,3 +16,6 @@ build/
 *.chd
 *.iso
 !tests/fixtures/**
+
+# Written by the release workflow from repository secrets, never committed.
+romgoblin/_dev_credentials.py
