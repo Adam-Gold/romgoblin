@@ -1,0 +1,175 @@
+{
+  "header": {
+    "APIversion": "2.0"
+  },
+  "response": {
+    "ssuser": {
+      "id": "example-user",
+      "niveau": "1",
+      "maxthreads": "1",
+      "requeststoday": "12",
+      "maxrequestsperday": "20000",
+      "maxrequestspermin": "3072"
+    },
+    "jeu": {
+      "id": "82606",
+      "noms": [
+        {
+          "region": "ss",
+          "text": "Pokémon - Crystal Version"
+        },
+        {
+          "region": "fr",
+          "text": "Pokémon : Version Cristal"
+        }
+      ],
+      "systeme": {
+        "id": "10",
+        "text": "Game Boy Color",
+        "parentid": "9"
+      },
+      "medias": [
+        {
+          "type": "sstitle",
+          "url": "https://neoclone.screenscraper.fr/api2/mediaJeu.php?devid=REDACTED&devpassword=REDACTED&softname=romgoblin&ssid=REDACTED&sspassword=REDACTED&systemeid=10&jeuid=82606&media=sstitle%28de%29",
+          "region": "de"
+        },
+        {
+          "type": "ss",
+          "url": "https://neoclone.screenscraper.fr/api2/mediaJeu.php?devid=REDACTED&devpassword=REDACTED&softname=romgoblin&ssid=REDACTED&sspassword=REDACTED&systemeid=10&jeuid=82606&media=ss%28fr%29",
+          "region": "fr"
+        },
+        {
+          "type": "fanart",
+          "url": "https://neoclone.screenscraper.fr/api2/mediaJeu.php?devid=REDACTED&devpassword=REDACTED&softname=romgoblin&ssid=REDACTED&sspassword=REDACTED&systemeid=10&jeuid=82606&media=fanart",
+          "region": null
+        },
+        {
+          "type": "video",
+          "url": "https://neoclone.screenscraper.fr/api2/mediaVideoJeu.php?devid=REDACTED&devpassword=REDACTED&softname=romgoblin&ssid=REDACTED&sspassword=REDACTED&systemeid=10&jeuid=82606&media=video",
+          "region": null
+        },
+        {
+          "type": "video-normalized",
+          "url": "https://neoclone.screenscraper.fr/api2/mediaVideoJeu.php?devid=REDACTED&devpassword=REDACTED&softname=romgoblin&ssid=REDACTED&sspassword=REDACTED&systemeid=10&jeuid=82606&media=video-normalized",
+          "region": null
+        },
+        {
+          "type": "steamgrid",
+          "url": "https://neoclone.screenscraper.fr/api2/mediaJeu.php?devid=REDACTED&devpassword=REDACTED&softname=romgoblin&ssid=REDACTED&sspassword=REDACTED&systemeid=10&jeuid=82606&media=steamgrid",
+          "region": null
+        },
+        {
+          "type": "wheel",
+          "url": "https://neoclone.screenscraper.fr/api2/mediaJeu.php?devid=REDACTED&devpassword=REDACTED&softname=romgoblin&ssid=REDACTED&sspassword=REDACTED&systemeid=10&jeuid=82606&media=wheel%28de%29",
+          "region": "de"
+        },
+        {
+          "type": "wheel-carbon",
+          "url": "https://neoclone.screenscraper.fr/api2/mediaJeu.php?devid=REDACTED&devpassword=REDACTED&softname=romgoblin&ssid=REDACTED&sspassword=REDACTED&systemeid=10&jeuid=82606&media=wheel-carbon%28de%29",
+          "region": "de"
+        },
+        {
+          "type": "wheel-steel",
+          "url": "https://neoclone.screenscraper.fr/api2/mediaJeu.php?devid=REDACTED&devpassword=REDACTED&softname=romgoblin&ssid=REDACTED&sspassword=REDACTED&systemeid=10&jeuid=82606&media=wheel-steel%28de%29",
+          "region": "de"
+        },
+        {
+          "type": "screenmarquee",
+          "url": "https://neoclone.screenscraper.fr/api2/mediaJeu.php?devid=REDACTED&devpassword=REDACTED&softname=romgoblin&ssid=REDACTED&sspassword=REDACTED&systemeid=10&jeuid=82606&media=screenmarquee%28jp%29",
+          "region": "jp"
+        },
+        {
+          "type": "screenmarqueesmall",
+          "url": "https://neoclone.screenscraper.fr/api2/mediaJeu.php?devid=REDACTED&devpassword=REDACTED&softname=romgoblin&ssid=REDACTED&sspassword=REDACTED&systemeid=10&jeuid=82606&media=screenmarqueesmall%28jp%29",
+          "region": "jp"
+        },
+        {
+          "type": "box-2D",
+          "url": "https://neoclone.screenscraper.fr/api2/mediaJeu.php?devid=REDACTED&devpassword=REDACTED&softname=romgoblin&ssid=REDACTED&sspassword=REDACTED&systemeid=10&jeuid=82606&media=box-2D%28de%29",
+          "region": "de"
+        },
+        {
+          "type": "box-2D-side",
+          "url": "https://neoclone.screenscraper.fr/api2/mediaJeu.php?devid=REDACTED&devpassword=REDACTED&softname=romgoblin&ssid=REDACTED&sspassword=REDACTED&systemeid=10&jeuid=82606&media=box-2D-side%28de%29",
+          "region": "de"
+        },
+        {
+          "type": "box-2D-back",
+          "url": "https://neoclone.screenscraper.fr/api2/mediaJeu.php?devid=REDACTED&devpassword=REDACTED&softname=romgoblin&ssid=REDACTED&sspassword=REDACTED&systemeid=10&jeuid=82606&media=box-2D-back%28de%29",
+          "region": "de"
+        },
+        {
+          "type": "box-texture",
+          "url": "https://neoclone.screenscraper.fr/api2/mediaJeu.php?devid=REDACTED&devpassword=REDACTED&softname=romgoblin&ssid=REDACTED&sspassword=REDACTED&systemeid=10&jeuid=82606&media=box-texture%28de%29",
+          "region": "de"
+        },
+        {
+          "type": "box-3D",
+          "url": "https://neoclone.screenscraper.fr/api2/mediaJeu.php?devid=REDACTED&devpassword=REDACTED&softname=romgoblin&ssid=REDACTED&sspassword=REDACTED&systemeid=10&jeuid=82606&media=box-3D%28de%29",
+          "region": "de"
+        },
+        {
+          "type": "manuel",
+          "url": "https://neoclone.screenscraper.fr/api2/mediaManuelJeu.php?devid=REDACTED&devpassword=REDACTED&softname=romgoblin&ssid=REDACTED&sspassword=REDACTED&systemeid=10&jeuid=82606&media=manuel%28de%29",
+          "region": "de"
+        },
+        {
+          "type": "maps",
+          "url": "https://neoclone.screenscraper.fr/api2/mediaJeu.php?devid=REDACTED&devpassword=REDACTED&softname=romgoblin&ssid=REDACTED&sspassword=REDACTED&systemeid=10&jeuid=82606&media=maps%28v0%29",
+          "region": null
+        },
+        {
+          "type": "support-texture",
+          "url": "https://neoclone.screenscraper.fr/api2/mediaJeu.php?devid=REDACTED&devpassword=REDACTED&softname=romgoblin&ssid=REDACTED&sspassword=REDACTED&systemeid=10&jeuid=82606&media=support-texture%28de%29",
+          "region": "de"
+        },
+        {
+          "type": "support-2D",
+          "url": "https://neoclone.screenscraper.fr/api2/mediaJeu.php?devid=REDACTED&devpassword=REDACTED&softname=romgoblin&ssid=REDACTED&sspassword=REDACTED&systemeid=10&jeuid=82606&media=support-2D%28de%29",
+          "region": "de"
+        },
+        {
+          "type": "bezel-16-9",
+          "url": "https://neoclone.screenscraper.fr/api2/mediaJeu.php?devid=REDACTED&devpassword=REDACTED&softname=romgoblin&ssid=REDACTED&sspassword=REDACTED&systemeid=10&jeuid=82606&media=bezel-16-9%28us%29",
+          "region": "us"
+        },
+        {
+          "type": "mixrbv1",
+          "url": "https://neoclone.screenscraper.fr/api2/mediaJeu.php?devid=REDACTED&devpassword=REDACTED&softname=romgoblin&ssid=REDACTED&sspassword=REDACTED&systemeid=10&jeuid=82606&media=mixrbv1%28de%29",
+          "region": "de"
+        },
+        {
+          "type": "mixrbv2",
+          "url": "https://neoclone.screenscraper.fr/api2/mediaJeu.php?devid=REDACTED&devpassword=REDACTED&softname=romgoblin&ssid=REDACTED&sspassword=REDACTED&systemeid=10&jeuid=82606&media=mixrbv2%28de%29",
+          "region": "de"
+        },
+        {
+          "type": "pictoliste",
+          "url": "https://neoclone.screenscraper.fr/api2/mediaGroup.php?devid=REDACTED&devpassword=REDACTED&softname=romgoblin&ssid=REDACTED&sspassword=REDACTED&groupid=46&media=pictoliste",
+          "region": null
+        },
+        {
+          "type": "pictomonochrome",
+          "url": "https://neoclone.screenscraper.fr/api2/mediaCompagnie.php?devid=REDACTED&devpassword=REDACTED&softname=romgoblin&ssid=REDACTED&sspassword=REDACTED&companyid=286&media=logo-monochrome",
+          "region": null
+        },
+        {
+          "type": "pictocouleur",
+          "url": "https://neoclone.screenscraper.fr/api2/mediaCompagnie.php?devid=REDACTED&devpassword=REDACTED&softname=romgoblin&ssid=REDACTED&sspassword=REDACTED&companyid=286&media=wheel",
+          "region": null
+        },
+        {
+          "type": "background",
+          "url": "https://neoclone.screenscraper.fr/api2/mediaGroup.php?devid=REDACTED&devpassword=REDACTED&softname=romgoblin&ssid=REDACTED&sspassword=REDACTED&groupid=8&media=background",
+          "region": null
+        },
+        {
+          "type": "figurine",
+          "url": "https://neoclone.screenscraper.fr/api2/mediaGroup.php?devid=REDACTED&devpassword=REDACTED&softname=romgoblin&ssid=REDACTED&sspassword=REDACTED&groupid=3752&media=figurine",
+          "region": null
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,69 @@
+name: Publish
+
+# Triggered by a tag. The wheel it builds is the only artifact that carries the
+# ScreenScraper developer credentials: they identify this software rather than
+# any user, so a release must have them and the repository must not. A public
+# repo with a credential in it is a credential anybody can lift and spend.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write # trusted publishing, so no PyPI token is stored here
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: Inject the developer credentials
+        # Written, built, and never committed - the file is git-ignored. If the
+        # secrets are absent the file still gets written, with empty strings, and
+        # the tool refuses at runtime with the real reason rather than shipping a
+        # build that fails obscurely.
+        env:
+          DEVID: ${{ secrets.SCREENSCRAPER_DEVID }}
+          DEVPASSWORD: ${{ secrets.SCREENSCRAPER_DEVPASSWORD }}
+        run: |
+          python - <<'PY'
+          import os, pathlib
+          pathlib.Path("romgoblin/_dev_credentials.py").write_text(
+              '"""Written at build time from repository secrets. Never committed."""\n'
+              f'DEV_ID = {os.environ.get("DEVID", "")!r}\n'
+              f'DEV_PASSWORD = {os.environ.get("DEVPASSWORD", "")!r}\n',
+              encoding="utf-8",
+          )
+          PY
+          test -s romgoblin/_dev_credentials.py
+
+      - name: Build
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+
+      - name: Check the credentials actually made it into the wheel
+        # A release that silently ships without them would refuse on every user's
+        # machine, and the failure would look like their problem rather than ours.
+        run: |
+          python - <<'PY'
+          import glob, zipfile, sys
+          wheel = glob.glob("dist/*.whl")[0]
+          with zipfile.ZipFile(wheel) as archive:
+              names = archive.namelist()
+              assert any(n.endswith("_dev_credentials.py") for n in names), "credentials missing from the wheel"
+          print("credentials present in", wheel)
+          PY
+
+      - uses: pypa/gh-action-pypi-publish@release/v1

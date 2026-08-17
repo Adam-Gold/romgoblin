@@ -26,9 +26,21 @@ def test_the_default_writes_nothing(tmp_path: Path, capsys) -> None:
     assert not (roms / "Game Boy Color (GBC)" / ".media").exists()
 
 
-def test_apply_without_credentials_refuses_before_touching_anything(tmp_path: Path, capsys) -> None:
+def test_apply_without_credentials_refuses_before_touching_anything(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
     """Exit 2: this is a configuration problem, not a transient one. Nothing is
-    created on the way to finding out."""
+    created on the way to finding out.
+
+    The absence is arranged rather than assumed. This test used to rely on the
+    machine running it having no credentials, which is true in CI and false on
+    the machine of anyone who followed the README - so it passed everywhere it
+    was written and failed the first time it mattered."""
+    from romgoblin import screenscraper
+
+    monkeypatch.setattr(screenscraper, "DEV_ID", "")
+    monkeypatch.setattr(screenscraper, "DEV_PASSWORD", "")
+
     roms = card(tmp_path)
     assert cli.main([str(roms), "--apply"]) == 2
     assert not (roms / "Game Boy Color (GBC)" / ".media").exists()
@@ -51,3 +63,181 @@ def test_a_card_with_every_cover_present_says_so(tmp_path: Path, capsys) -> None
     (roms / "Game Boy Color (GBC)").mkdir(parents=True)
     assert cli.main([str(roms)]) == 0
     assert "Nothing to do" in capsys.readouterr().out
+
+
+# --- the run that goes wrong in the middle ------------------------------------
+#
+# The interesting path, and the one no dry run reaches. A real library is
+# around a hundred games, so "what happens when number 40 fails" is not an edge
+# case - it is Tuesday.
+
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"pretend"
+
+
+class FakeClient:
+    """Stands in for ScreenScraper. Answers by ROM name so a test can say which
+    game misbehaves."""
+
+    def __init__(self, behaviour: dict[str, str]) -> None:
+        self.behaviour = behaviour
+        self.downloads = 0
+        self.widths: list[int] = []
+
+    def lookup(self, *, crc, filename, size, system_id):  # noqa: ANN001, ANN003
+        from romgoblin import screenscraper
+
+        what = self.behaviour.get(Path(filename).stem, "ok")
+        if what == "lookup-fails":
+            raise screenscraper.ScraperError("HTTP 503 from ScreenScraper")
+        if what == "quota":
+            raise screenscraper.QuotaExhausted("daily quota spent (100/100)")
+        medias = (
+            []
+            if what == "no-cover"
+            else [{"type": "box-2D", "region": "wor", "url": "https://x/?m=1"}]
+        )
+        payload = {"response": {"ssuser": {}, "jeu": {"medias": medias}}}
+        return payload, screenscraper.Quota(used=1, allowed=100)
+
+    def download(self, url: str, max_width: int = 0) -> bytes:  # noqa: ARG002
+        self.downloads += 1
+        self.widths.append(max_width)
+        return PNG
+
+
+def library(tmp_path: Path, *names: str) -> Path:
+    roms = tmp_path / "Roms"
+    folder = roms / "Game Boy Color (GBC)"
+    folder.mkdir(parents=True)
+    for name in names:
+        (folder / f"{name}.gbc").write_bytes(b"rom-" + name.encode())
+    return roms
+
+
+def run(monkeypatch, roms: Path, client: FakeClient) -> int:
+    from romgoblin import screenscraper
+
+    monkeypatch.setattr(
+        screenscraper.Credentials,
+        "resolve",
+        classmethod(lambda cls: screenscraper.Credentials("d", "p", "s", "p")),
+    )
+    monkeypatch.setattr(screenscraper, "Client", lambda credentials: client)
+    return cli.main([str(roms), "--apply"])
+
+
+def test_one_failure_does_not_cost_the_rest_of_the_run(tmp_path: Path, monkeypatch, capsys) -> None:
+    """A timeout on game two used to end the run, abandoning games three and
+    four - and every request already made was spent out of the day's
+    allowance."""
+    roms = library(tmp_path, "One", "Two", "Three", "Four")
+    client = FakeClient({"Two": "lookup-fails"})
+    assert run(monkeypatch, roms, client) == 0
+
+    media = roms / "Game Boy Color (GBC)" / ".media"
+    assert sorted(p.name for p in media.iterdir()) == ["Four.png", "One.png", "Three.png"]
+    out = capsys.readouterr().out
+    assert "1 failed and can be retried" in out
+    assert "Two" in out
+
+
+def test_a_failure_and_an_unrecognised_rom_are_reported_apart(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    """Different problems, different answers: a checksum nobody knows is a ROM
+    to look at by hand, a 503 is worth running again in a minute."""
+    roms = library(tmp_path, "Known", "Unknown", "Flaky")
+    run(monkeypatch, roms, FakeClient({"Unknown": "no-cover", "Flaky": "lookup-fails"}))
+    out = capsys.readouterr().out
+    assert "not recognised by checksum" in out and "failed and can be retried" in out
+
+
+def test_a_spent_quota_stops_and_says_where_it_got_to(tmp_path: Path, monkeypatch, capsys) -> None:
+    """Exit zero. The allowance ran out, which is the arrangement working, not
+    the tool failing."""
+    roms = library(tmp_path, "A", "B", "C")
+    assert run(monkeypatch, roms, FakeClient({"B": "quota"})) == 0
+    out = capsys.readouterr().out
+    assert "Run again tomorrow to continue" in out
+    # Whatever it managed is kept. The next run finds it and skips it.
+    assert (roms / "Game Boy Color (GBC)" / ".media" / "A.png").exists()
+
+
+def test_a_cover_that_is_already_there_is_never_fetched_again(tmp_path: Path, monkeypatch) -> None:
+    """The promise the README makes about running beside the on-device scraper:
+    it costs no request, so it cannot cost the quota either."""
+    roms = library(tmp_path, "Have", "Need")
+    media = roms / "Game Boy Color (GBC)" / ".media"
+    media.mkdir()
+    (media / "Have.png").write_bytes(b"someone else's cover")
+
+    client = FakeClient({})
+    run(monkeypatch, roms, client)
+    assert client.downloads == 1
+    assert (media / "Have.png").read_bytes() == b"someone else's cover"
+
+
+def test_a_service_outage_stops_early_and_says_so_once(tmp_path: Path, monkeypatch, capsys) -> None:
+    """The first live run met ScreenScraper's database being down: fourteen
+    games, fourteen identical failures, seven of them after a thirty-second
+    wait. Three minutes to learn one fact, printed fourteen times."""
+    roms = library(tmp_path, "A", "B", "C", "D", "E", "F")
+    client = FakeClient(dict.fromkeys("ABCDEF", "lookup-fails"))
+    assert run(monkeypatch, roms, client) == 1
+
+    out = capsys.readouterr().out
+    assert "looks like ScreenScraper rather than your library" in out
+    assert out.count("HTTP 503") == 1, "the same fact, once"
+    assert not (roms / "Game Boy Color (GBC)" / ".media").exists()
+
+
+def test_a_few_bad_games_do_not_stop_a_working_run(tmp_path: Path, monkeypatch, capsys) -> None:
+    """The counter resets on success. A library with a handful of unreachable
+    games is a different situation from an outage, and cutting it short would
+    abandon everything after the third bad one."""
+    roms = library(tmp_path, "A", "Bad1", "Bad2", "Bad3", "Z")
+    behaviour = dict.fromkeys(["Bad1", "Bad2", "Bad3"], "lookup-fails")
+    assert run(monkeypatch, roms, FakeClient(behaviour)) == 0
+
+    media = roms / "Game Boy Color (GBC)" / ".media"
+    assert sorted(p.name for p in media.iterdir()) == ["A.png", "Z.png"]
+
+
+def test_an_unrecognised_rom_does_not_count_towards_giving_up(tmp_path: Path, monkeypatch) -> None:
+    """Their service answered; it does not know this ROM. That is the tool
+    working, and a card full of hacks would otherwise look like an outage."""
+    roms = library(tmp_path, "U1", "U2", "U3", "U4", "Known")
+    behaviour = dict.fromkeys(["U1", "U2", "U3", "U4"], "no-cover")
+    assert run(monkeypatch, roms, FakeClient(behaviour)) == 0
+    assert (roms / "Game Boy Color (GBC)" / ".media" / "Known.png").exists()
+
+
+def test_covers_are_resized_before_they_are_downloaded(tmp_path: Path, monkeypatch) -> None:
+    """Measured on the real card: unresized, Diddy Kong Racing's box art is
+    1000x690 and 1274 KB, and a 107-game library is 133 MB of pictures wider
+    than the Brick's entire screen. ScreenScraper resizes on their side, so a
+    limit here is bandwidth never spent rather than spent and thrown away."""
+    from romgoblin import screenscraper
+
+    roms = library(tmp_path, "A")
+    client = FakeClient({})
+    run(monkeypatch, roms, client)
+    assert client.widths == [screenscraper.DEFAULT_MAX_WIDTH]
+
+
+def test_the_width_limit_can_be_turned_off(tmp_path: Path, monkeypatch) -> None:
+    """For a screen bigger than this one."""
+    from romgoblin import screenscraper
+
+    roms = library(tmp_path, "A")
+    client = FakeClient({})
+    monkeypatch.setattr(
+        screenscraper.Credentials,
+        "resolve",
+        classmethod(lambda cls: screenscraper.Credentials("d", "p", "s", "p")),
+    )
+    monkeypatch.setattr(screenscraper, "Client", lambda credentials: client)
+
+    assert cli.main([str(roms), "--apply", "--max-width", "0"]) == 0
+    assert client.widths == [0]
